@@ -2392,7 +2392,7 @@ function numberIsNaN (obj) {
 }
 
 }).call(this)}).call(this,require("buffer").Buffer)
-},{"base64-js":62,"buffer":64,"ieee754":81}],65:[function(require,module,exports){
+},{"base64-js":62,"buffer":64,"ieee754":82}],65:[function(require,module,exports){
 'use strict';
 
 var GetIntrinsic = require('get-intrinsic');
@@ -3540,18 +3540,23 @@ var ThrowTypeError = $gOPD
 	: throwTypeError;
 
 var hasSymbols = require('has-symbols')();
+var hasProto = require('has-proto')();
 
-var getProto = Object.getPrototypeOf || function (x) { return x.__proto__; }; // eslint-disable-line no-proto
+var getProto = Object.getPrototypeOf || (
+	hasProto
+		? function (x) { return x.__proto__; } // eslint-disable-line no-proto
+		: null
+);
 
 var needsEval = {};
 
-var TypedArray = typeof Uint8Array === 'undefined' ? undefined : getProto(Uint8Array);
+var TypedArray = typeof Uint8Array === 'undefined' || !getProto ? undefined : getProto(Uint8Array);
 
 var INTRINSICS = {
 	'%AggregateError%': typeof AggregateError === 'undefined' ? undefined : AggregateError,
 	'%Array%': Array,
 	'%ArrayBuffer%': typeof ArrayBuffer === 'undefined' ? undefined : ArrayBuffer,
-	'%ArrayIteratorPrototype%': hasSymbols ? getProto([][Symbol.iterator]()) : undefined,
+	'%ArrayIteratorPrototype%': hasSymbols && getProto ? getProto([][Symbol.iterator]()) : undefined,
 	'%AsyncFromSyncIteratorPrototype%': undefined,
 	'%AsyncFunction%': needsEval,
 	'%AsyncGenerator%': needsEval,
@@ -3581,10 +3586,10 @@ var INTRINSICS = {
 	'%Int32Array%': typeof Int32Array === 'undefined' ? undefined : Int32Array,
 	'%isFinite%': isFinite,
 	'%isNaN%': isNaN,
-	'%IteratorPrototype%': hasSymbols ? getProto(getProto([][Symbol.iterator]())) : undefined,
+	'%IteratorPrototype%': hasSymbols && getProto ? getProto(getProto([][Symbol.iterator]())) : undefined,
 	'%JSON%': typeof JSON === 'object' ? JSON : undefined,
 	'%Map%': typeof Map === 'undefined' ? undefined : Map,
-	'%MapIteratorPrototype%': typeof Map === 'undefined' || !hasSymbols ? undefined : getProto(new Map()[Symbol.iterator]()),
+	'%MapIteratorPrototype%': typeof Map === 'undefined' || !hasSymbols || !getProto ? undefined : getProto(new Map()[Symbol.iterator]()),
 	'%Math%': Math,
 	'%Number%': Number,
 	'%Object%': Object,
@@ -3597,10 +3602,10 @@ var INTRINSICS = {
 	'%Reflect%': typeof Reflect === 'undefined' ? undefined : Reflect,
 	'%RegExp%': RegExp,
 	'%Set%': typeof Set === 'undefined' ? undefined : Set,
-	'%SetIteratorPrototype%': typeof Set === 'undefined' || !hasSymbols ? undefined : getProto(new Set()[Symbol.iterator]()),
+	'%SetIteratorPrototype%': typeof Set === 'undefined' || !hasSymbols || !getProto ? undefined : getProto(new Set()[Symbol.iterator]()),
 	'%SharedArrayBuffer%': typeof SharedArrayBuffer === 'undefined' ? undefined : SharedArrayBuffer,
 	'%String%': String,
-	'%StringIteratorPrototype%': hasSymbols ? getProto(''[Symbol.iterator]()) : undefined,
+	'%StringIteratorPrototype%': hasSymbols && getProto ? getProto(''[Symbol.iterator]()) : undefined,
 	'%Symbol%': hasSymbols ? Symbol : undefined,
 	'%SyntaxError%': $SyntaxError,
 	'%ThrowTypeError%': ThrowTypeError,
@@ -3616,12 +3621,14 @@ var INTRINSICS = {
 	'%WeakSet%': typeof WeakSet === 'undefined' ? undefined : WeakSet
 };
 
-try {
-	null.error; // eslint-disable-line no-unused-expressions
-} catch (e) {
-	// https://github.com/tc39/proposal-shadowrealm/pull/384#issuecomment-1364264229
-	var errorProto = getProto(getProto(e));
-	INTRINSICS['%Error.prototype%'] = errorProto;
+if (getProto) {
+	try {
+		null.error; // eslint-disable-line no-unused-expressions
+	} catch (e) {
+		// https://github.com/tc39/proposal-shadowrealm/pull/384#issuecomment-1364264229
+		var errorProto = getProto(getProto(e));
+		INTRINSICS['%Error.prototype%'] = errorProto;
+	}
 }
 
 var doEval = function doEval(name) {
@@ -3639,7 +3646,7 @@ var doEval = function doEval(name) {
 		}
 	} else if (name === '%AsyncIteratorPrototype%') {
 		var gen = doEval('%AsyncGenerator%');
-		if (gen) {
+		if (gen && getProto) {
 			value = getProto(gen.prototype);
 		}
 	}
@@ -3840,7 +3847,20 @@ module.exports = function GetIntrinsic(name, allowMissing) {
 	return value;
 };
 
-},{"function-bind":76,"has":80,"has-symbols":78}],78:[function(require,module,exports){
+},{"function-bind":76,"has":81,"has-proto":78,"has-symbols":79}],78:[function(require,module,exports){
+'use strict';
+
+var test = {
+	foo: {}
+};
+
+var $Object = Object;
+
+module.exports = function hasProto() {
+	return { __proto__: test }.foo === test.foo && !({ __proto__: null } instanceof $Object);
+};
+
+},{}],79:[function(require,module,exports){
 'use strict';
 
 var origSymbol = typeof Symbol !== 'undefined' && Symbol;
@@ -3855,7 +3875,7 @@ module.exports = function hasNativeSymbols() {
 	return hasSymbolSham();
 };
 
-},{"./shams":79}],79:[function(require,module,exports){
+},{"./shams":80}],80:[function(require,module,exports){
 'use strict';
 
 /* eslint complexity: [2, 18], max-statements: [2, 33] */
@@ -3899,14 +3919,14 @@ module.exports = function hasSymbols() {
 	return true;
 };
 
-},{}],80:[function(require,module,exports){
+},{}],81:[function(require,module,exports){
 'use strict';
 
 var bind = require('function-bind');
 
 module.exports = bind.call(Function.call, Object.prototype.hasOwnProperty);
 
-},{"function-bind":76}],81:[function(require,module,exports){
+},{"function-bind":76}],82:[function(require,module,exports){
 /*! ieee754. BSD-3-Clause License. Feross Aboukhadijeh <https://feross.org/opensource> */
 exports.read = function (buffer, offset, isLE, mLen, nBytes) {
   var e, m
@@ -3993,7 +4013,7 @@ exports.write = function (buffer, value, offset, isLE, mLen, nBytes) {
   buffer[offset + i - d] |= s * 128
 }
 
-},{}],82:[function(require,module,exports){
+},{}],83:[function(require,module,exports){
 var hasMap = typeof Map === 'function' && Map.prototype;
 var mapSizeDescriptor = Object.getOwnPropertyDescriptor && hasMap ? Object.getOwnPropertyDescriptor(Map.prototype, 'size') : null;
 var mapSize = hasMap && mapSizeDescriptor && typeof mapSizeDescriptor.get === 'function' ? mapSizeDescriptor.get : null;
@@ -4511,7 +4531,7 @@ function arrObjKeys(obj, inspect) {
     return xs;
 }
 
-},{"./util.inspect":63}],83:[function(require,module,exports){
+},{"./util.inspect":63}],84:[function(require,module,exports){
 'use strict';
 
 var replace = String.prototype.replace;
@@ -4536,7 +4556,7 @@ module.exports = {
     RFC3986: Format.RFC3986
 };
 
-},{}],84:[function(require,module,exports){
+},{}],85:[function(require,module,exports){
 'use strict';
 
 var stringify = require('./stringify');
@@ -4549,7 +4569,7 @@ module.exports = {
     stringify: stringify
 };
 
-},{"./formats":83,"./parse":85,"./stringify":86}],85:[function(require,module,exports){
+},{"./formats":84,"./parse":86,"./stringify":87}],86:[function(require,module,exports){
 'use strict';
 
 var utils = require('./utils');
@@ -4601,7 +4621,8 @@ var isoSentinel = 'utf8=%26%2310003%3B'; // encodeURIComponent('&#10003;')
 var charsetSentinel = 'utf8=%E2%9C%93'; // encodeURIComponent('✓')
 
 var parseValues = function parseQueryStringValues(str, options) {
-    var obj = {};
+    var obj = { __proto__: null };
+
     var cleanStr = options.ignoreQueryPrefix ? str.replace(/^\?/, '') : str;
     var limit = options.parameterLimit === Infinity ? undefined : options.parameterLimit;
     var parts = cleanStr.split(options.delimiter, limit);
@@ -4814,7 +4835,7 @@ module.exports = function (str, opts) {
     return utils.compact(obj);
 };
 
-},{"./utils":87}],86:[function(require,module,exports){
+},{"./utils":88}],87:[function(require,module,exports){
 'use strict';
 
 var getSideChannel = require('side-channel');
@@ -5136,7 +5157,7 @@ module.exports = function (object, opts) {
     return joined.length > 0 ? prefix + joined : '';
 };
 
-},{"./formats":83,"./utils":87,"side-channel":88}],87:[function(require,module,exports){
+},{"./formats":84,"./utils":88,"side-channel":89}],88:[function(require,module,exports){
 'use strict';
 
 var formats = require('./formats');
@@ -5390,7 +5411,7 @@ module.exports = {
     merge: merge
 };
 
-},{"./formats":83}],88:[function(require,module,exports){
+},{"./formats":84}],89:[function(require,module,exports){
 'use strict';
 
 var GetIntrinsic = require('get-intrinsic');
@@ -5516,7 +5537,7 @@ module.exports = function getSideChannel() {
 	return channel;
 };
 
-},{"call-bind/callBound":65,"get-intrinsic":77,"object-inspect":82}],89:[function(require,module,exports){
+},{"call-bind/callBound":65,"get-intrinsic":77,"object-inspect":83}],90:[function(require,module,exports){
 'use strict';
 
 var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; };
@@ -5576,7 +5597,7 @@ function isEmptyObj(obj) {
   }
   return true;
 }
-},{"qs":84}],90:[function(require,module,exports){
+},{"qs":85}],91:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.convertDateAgo = exports.convertDate = void 0;
@@ -5659,7 +5680,7 @@ function convertDateAgo(date, source) {
 }
 exports.convertDateAgo = convertDateAgo;
 
-},{}],91:[function(require,module,exports){
+},{}],92:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MangaStream = exports.getExportVersion = void 0;
@@ -6092,7 +6113,7 @@ class MangaStream {
 }
 exports.MangaStream = MangaStream;
 
-},{"./MangaStreamHelper":92,"./MangaStreamParser":93,"./UrlBuilder":96,"@paperback/types":61}],92:[function(require,module,exports){
+},{"./MangaStreamHelper":93,"./MangaStreamParser":94,"./UrlBuilder":97,"@paperback/types":61}],93:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getFilterTagsBySection = exports.getIncludedTagBySection = exports.createHomeSection = exports.DefaultHomeSectionData = void 0;
@@ -6130,7 +6151,7 @@ function getFilterTagsBySection(section, tags, included, supportsExclusion = fal
 }
 exports.getFilterTagsBySection = getFilterTagsBySection;
 
-},{"@paperback/types":61}],93:[function(require,module,exports){
+},{"@paperback/types":61}],94:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MangaStreamParser = void 0;
@@ -6443,7 +6464,7 @@ class MangaStreamParser {
 }
 exports.MangaStreamParser = MangaStreamParser;
 
-},{"./LanguageUtils":90,"entities":74,"simple-url":89}],94:[function(require,module,exports){
+},{"./LanguageUtils":91,"entities":74,"simple-url":90}],95:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SkyMangas = exports.SkyMangasInfo = void 0;
@@ -6547,7 +6568,7 @@ class SkyMangas extends MangaStream_1.MangaStream {
 }
 exports.SkyMangas = SkyMangas;
 
-},{"../MangaStream":91,"../MangaStreamHelper":92,"./SkyMangasParser":95,"@paperback/types":61}],95:[function(require,module,exports){
+},{"../MangaStream":92,"../MangaStreamHelper":93,"./SkyMangasParser":96,"@paperback/types":61}],96:[function(require,module,exports){
 (function (Buffer){(function (){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
@@ -6599,7 +6620,7 @@ class SkyMangasParser extends MangaStreamParser_1.MangaStreamParser {
 exports.SkyMangasParser = SkyMangasParser;
 
 }).call(this)}).call(this,require("buffer").Buffer)
-},{"../MangaStreamParser":93,"buffer":64}],96:[function(require,module,exports){
+},{"../MangaStreamParser":94,"buffer":64}],97:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.URLBuilder = void 0;
@@ -6660,5 +6681,5 @@ class URLBuilder {
 }
 exports.URLBuilder = URLBuilder;
 
-},{}]},{},[94])(94)
+},{}]},{},[95])(95)
 });
