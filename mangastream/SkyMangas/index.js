@@ -5724,6 +5724,10 @@ class MangaStream {
                 }
             }
         });
+        /**
+         * The language code which this source supports.
+         */
+        this.language = '🇬🇧';
         // ----GENERAL SELECTORS----
         /**
          * The pathname between the domain and the manga.
@@ -6499,7 +6503,7 @@ class SkyMangas extends MangaStream_1.MangaStream {
     constructor() {
         super(...arguments);
         this.baseUrl = SKYMANGAS_DOMAIN;
-        this.languageCode = '🇪🇸';
+        this.language = '🇪🇸';
         this.parser = new SkyMangasParser_1.SkyMangasParser();
         //----DATE SETTINGS
         this.dateMonths = {

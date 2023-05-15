@@ -3704,6 +3704,10 @@ class MangaStream {
                 }
             }
         });
+        /**
+         * The language code which this source supports.
+         */
+        this.language = '🇬🇧';
         // ----GENERAL SELECTORS----
         /**
          * The pathname between the domain and the manga.
@@ -4477,7 +4481,6 @@ class ManhwaX extends MangaStream_1.MangaStream {
     constructor() {
         super(...arguments);
         this.baseUrl = MANHWAX_DOMAIN;
-        this.languageCode = '🇬🇧';
     }
     configureSections() {
         this.sections['popular_today'].enabled = false;

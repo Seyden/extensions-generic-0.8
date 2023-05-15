@@ -3693,7 +3693,7 @@ class LelManga extends MangaStream_1.MangaStream {
     constructor() {
         super(...arguments);
         this.baseUrl = LELMANGA_DOMAIN;
-        this.languageCode = '🇫🇷';
+        this.language = '🇫🇷';
         this.manga_selector_author = 'Autheur';
         this.manga_selector_artist = 'Artiste';
         this.supportsTagExclusion = async () => true;
@@ -3750,6 +3750,10 @@ class MangaStream {
                 }
             }
         });
+        /**
+         * The language code which this source supports.
+         */
+        this.language = '🇬🇧';
         // ----GENERAL SELECTORS----
         /**
          * The pathname between the domain and the manga.

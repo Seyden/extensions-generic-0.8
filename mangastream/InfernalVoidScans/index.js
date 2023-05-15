@@ -3606,7 +3606,6 @@ class InfernalVoidScans extends MangaStream_1.MangaStream {
     constructor() {
         super(...arguments);
         this.baseUrl = INFERNALVOIDSCANS_DOMAIN;
-        this.languageCode = '🇬🇧';
     }
     configureSections() {
         this.sections['latest_update'].selectorFunc = ($) => $('div.uta', $('h2:contains(Project Update)')?.parent()?.next());
@@ -3745,6 +3744,10 @@ class MangaStream {
                 }
             }
         });
+        /**
+         * The language code which this source supports.
+         */
+        this.language = '🇬🇧';
         // ----GENERAL SELECTORS----
         /**
          * The pathname between the domain and the manga.

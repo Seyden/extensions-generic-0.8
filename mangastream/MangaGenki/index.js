@@ -3693,7 +3693,6 @@ class MangaGenki extends MangaStream_1.MangaStream {
     constructor() {
         super(...arguments);
         this.baseUrl = MANGAGENKI_DOMAIN;
-        this.languageCode = '🇬🇧';
     }
     configureSections() {
         this.sections['new_titles'].selectorFunc = ($) => $('li', $('h3:contains(New Titles)')?.parent()?.next());
@@ -3745,6 +3744,10 @@ class MangaStream {
                 }
             }
         });
+        /**
+         * The language code which this source supports.
+         */
+        this.language = '🇬🇧';
         // ----GENERAL SELECTORS----
         /**
          * The pathname between the domain and the manga.

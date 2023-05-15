@@ -3704,6 +3704,10 @@ class MangaStream {
                 }
             }
         });
+        /**
+         * The language code which this source supports.
+         */
+        this.language = '🇬🇧';
         // ----GENERAL SELECTORS----
         /**
          * The pathname between the domain and the manga.
@@ -4477,7 +4481,7 @@ class SushiScan extends MangaStream_1.MangaStream {
     constructor() {
         super(...arguments);
         this.baseUrl = SUSHI_SCAN_DOMAIN;
-        this.languageCode = '🇫🇷';
+        this.language = '🇫🇷';
         this.manga_tag_selector_box = 'div.seriestugenre';
         this.manga_selector_artist = 'Dessinateur';
         this.manga_selector_author = 'Auteur';

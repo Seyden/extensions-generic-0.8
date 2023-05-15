@@ -3704,6 +3704,10 @@ class MangaStream {
                 }
             }
         });
+        /**
+         * The language code which this source supports.
+         */
+        this.language = '🇬🇧';
         // ----GENERAL SELECTORS----
         /**
          * The pathname between the domain and the manga.
@@ -4473,7 +4477,6 @@ class ReadKomik extends MangaStream_1.MangaStream {
     constructor() {
         super(...arguments);
         this.baseUrl = READKOMIK_DOMAIN;
-        this.languageCode = '🇬🇧';
     }
     configureSections() {
         this.sections['new_titles'].enabled = false;

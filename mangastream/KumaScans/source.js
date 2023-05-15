@@ -3606,7 +3606,6 @@ class KumaScans extends MangaStream_1.MangaStream {
     constructor() {
         super(...arguments);
         this.baseUrl = KUMASCANS_DOMAIN;
-        this.languageCode = '🇬🇧';
     }
     configureSections() {
         this.sections['latest_update'].selectorFunc = ($) => $('div.bsx', $('h2:contains(Latest Update)')?.parent()?.next());
@@ -3741,6 +3740,10 @@ class MangaStream {
                 }
             }
         });
+        /**
+         * The language code which this source supports.
+         */
+        this.language = '🇬🇧';
         // ----GENERAL SELECTORS----
         /**
          * The pathname between the domain and the manga.

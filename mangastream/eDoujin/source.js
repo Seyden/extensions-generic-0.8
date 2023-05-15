@@ -3704,6 +3704,10 @@ class MangaStream {
                 }
             }
         });
+        /**
+         * The language code which this source supports.
+         */
+        this.language = '🇬🇧';
         // ----GENERAL SELECTORS----
         /**
          * The pathname between the domain and the manga.
@@ -4534,7 +4538,6 @@ class eDoujin extends MangaStream_1.MangaStream {
     constructor() {
         super(...arguments);
         this.baseUrl = EDOUJIN_DOMAIN;
-        this.languageCode = '🇬🇧';
     }
     configureSections() {
         this.sections['latest_update'].selectorFunc = ($) => $('div.utao', $('h2:contains(Latest Update)')?.parent()?.next());

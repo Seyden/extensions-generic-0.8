@@ -3611,7 +3611,6 @@ class AsuraScans extends MangaStream_1.MangaStream {
     constructor() {
         super(...arguments);
         this.baseUrl = ASURASCANS_DOMAIN;
-        this.languageCode = '🇬🇧';
         this.parser = new AsuraScansParser_1.AsuraScansParser();
         this.requestManager = App.createRequestManager({
             requestsPerSecond: 2,
@@ -3765,6 +3764,10 @@ class MangaStream {
                 }
             }
         });
+        /**
+         * The language code which this source supports.
+         */
+        this.language = '🇬🇧';
         // ----GENERAL SELECTORS----
         /**
          * The pathname between the domain and the manga.

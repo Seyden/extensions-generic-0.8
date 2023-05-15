@@ -3610,7 +3610,6 @@ class CosmicScans extends MangaStream_1.MangaStream {
     constructor() {
         super(...arguments);
         this.baseUrl = COSMICSCANS_DOMAIN;
-        this.languageCode = '🇬🇧';
     }
     interceptResponse(response) {
         console.log(`Response Status ${response.status} with location ${response.headers.location}`);
@@ -3752,6 +3751,10 @@ class MangaStream {
                 }
             }
         });
+        /**
+         * The language code which this source supports.
+         */
+        this.language = '🇬🇧';
         // ----GENERAL SELECTORS----
         /**
          * The pathname between the domain and the manga.
