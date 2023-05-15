@@ -1,14 +1,12 @@
 # Extensions Generic (0.8) Repo Index
 
-[Github Repo](https://github.com/TheNetsky/extensions-generic-0.8)
+[Github Repo](https://github.com/Seyden/extensions-generic-0.8)
 <br>
-Join the [Discord](https://discord.gg/rmf6jQpMU9) for support and more sources!
+Write me a DM in [Discord Seyden#1647](https://discordapp.com/users/197818400196657152) for support and more source requests!
 
 ## Current Repo
 
 | Source Type | Description |          Link |
 | ---        |    ----   |         --- |
-| Madara      | Madara Generic      | [Click me!](https://thenetsky.github.io/extensions-generic-0.8/madara/)    |
-| BuddyComplex      | BuddyComplex Generic      | [Click me!](https://thenetsky.github.io/extensions-generic-0.8/buddycomplex/)    |
-| MangaBox      | MangaBox Generic      | [Click me!](https://thenetsky.github.io/extensions-generic-0.8/mangabox/)    |
+| MangaStream      | MangaStream Generic      | [Click me!](https://seyden.github.io/extensions-generic-0.8/mangastream/)    |
 
