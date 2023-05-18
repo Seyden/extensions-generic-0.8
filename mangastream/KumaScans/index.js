@@ -3616,8 +3616,7 @@ exports.KumaScans = KumaScans;
 },{"../MangaStream":90,"@paperback/types":61}],89:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.convertDateAgo = exports.convertDate = void 0;
-/* eslint-disable linebreak-style */
+exports.convertDate = void 0;
 function convertDate(rawDate, source) {
     const dateString = rawDate.toLowerCase();
     const monthObject = source.dateMonths;
@@ -3632,69 +3631,6 @@ function convertDate(rawDate, source) {
     return new Date(date);
 }
 exports.convertDate = convertDate;
-function convertDateAgo(date, source) {
-    const dateString = date.toLowerCase();
-    const timeObject = source.dateTimeAgo;
-    //Get type of time that has passed
-    let timeType = null;
-    for (const typeOfTime in timeObject) {
-        for (const item of timeObject[typeOfTime]) {
-            if (dateString.includes(item.toLowerCase())) {
-                timeType = typeOfTime;
-            }
-        }
-    }
-    //Now we have the type of time that has passed, this can be anything from a "week" to a "year".
-    //Now we need to get the amount of time that has passed.
-    let timeAgoAmount = null;
-    const RegExAgoAmount = /(\d+)/.exec(date);
-    if (RegExAgoAmount && RegExAgoAmount[1])
-        timeAgoAmount = Number(RegExAgoAmount[1]);
-    if (!timeAgoAmount || isNaN(timeAgoAmount) || !timeType) {
-        console.log(`Failed to parse time ago format! Either timeType:${timeType} or timeAgoAmount:${timeAgoAmount} is null.`);
-        //Since this isn't really important, log it and return null. These titles will just be excluded from the updated section.
-        return null;
-    }
-    //Now we have the time type and number.
-    //Now we generate the new date!
-    let time = null;
-    switch (timeType) {
-        case 'now':
-            time = new Date(Date.now());
-            break;
-        case 'yesterday':
-            time = new Date(Date.now() - 86400000);
-            break;
-        case 'years':
-            time = new Date(Date.now() - (timeAgoAmount * 31556952000));
-            break;
-        case 'months':
-            time = new Date(Date.now() - (timeAgoAmount * 2592000000));
-            break;
-        case 'weeks':
-            time = new Date(Date.now() - (timeAgoAmount * 604800000));
-            break;
-        case 'days':
-            time = new Date(Date.now() - (timeAgoAmount * 86400000));
-            break;
-        case 'hours':
-            time = new Date(Date.now() - (timeAgoAmount * 3600000));
-            break;
-        case 'minutes':
-            time = new Date(Date.now() - (timeAgoAmount * 3600000));
-            break;
-        case 'seconds':
-            time = new Date(Date.now() - (timeAgoAmount * 3600000));
-            break;
-        default:
-            time = null;
-            break;
-    }
-    if (String(time) == 'Invalid Date')
-        time = null; //Check if it's valid or not, if not return null, parser will know what to do!
-    return time;
-}
-exports.convertDateAgo = convertDateAgo;
 
 },{}],90:[function(require,module,exports){
 "use strict";
@@ -3705,6 +3641,7 @@ const types_1 = require("@paperback/types");
 const MangaStreamParser_1 = require("./MangaStreamParser");
 const UrlBuilder_1 = require("./UrlBuilder");
 const MangaStreamHelper_1 = require("./MangaStreamHelper");
+const simpleUrl = require('simple-url');
 // Set the version for the base, changing this version will change the versions of all sources
 const BASE_VERSION = '3.0.0';
 const getExportVersion = (EXTENSION_VERSION) => {
@@ -3732,6 +3669,11 @@ class MangaStream {
                             }) // Used for images hosted on Wordpress blogs
                         }
                     };
+                    const path = simpleUrl.parse(request.url, true);
+                    if (!path.protocol || path.protocol == 'http') {
+                        path.protocol = 'https';
+                        request.url = simpleUrl.create(path);
+                    }
                     return request;
                 },
                 interceptResponse: async (response) => {
@@ -3822,25 +3764,6 @@ class MangaStream {
             october: 'October',
             november: 'November',
             december: 'December'
-        };
-        /**
-         * In this object, add the site's translations for the following time formats, case insensitive.
-         * If the site uses "12 hours ago" or "1 hour ago", only adding "hour" will be enough since "hours" includes "hour".
-         * Default =  English Translation
-         */
-        this.dateTimeAgo = {
-            now: [
-                'less than an hour',
-                'just now'
-            ],
-            yesterday: ['yesterday'],
-            years: ['year'],
-            months: ['month'],
-            weeks: ['week'],
-            days: ['day'],
-            hours: ['hour'],
-            minutes: ['min'],
-            seconds: ['second']
         };
         this.sections = {
             'popular_today': {
@@ -4142,7 +4065,7 @@ class MangaStream {
 }
 exports.MangaStream = MangaStream;
 
-},{"./MangaStreamHelper":91,"./MangaStreamParser":92,"./UrlBuilder":93,"@paperback/types":61}],91:[function(require,module,exports){
+},{"./MangaStreamHelper":91,"./MangaStreamParser":92,"./UrlBuilder":93,"@paperback/types":61,"simple-url":87}],91:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getFilterTagsBySection = exports.getIncludedTagBySection = exports.createHomeSection = exports.DefaultHomeSectionData = void 0;
@@ -4186,7 +4109,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.MangaStreamParser = void 0;
 const LanguageUtils_1 = require("./LanguageUtils");
 const entities = require("entities");
-const url = require('simple-url');
 class MangaStreamParser {
     constructor() {
         this.isLastPage = ($, id) => {
@@ -4328,11 +4250,6 @@ class MangaStreamParser {
                 continue;
             }
             index.images.map((p) => {
-                const path = url.parse(p, true);
-                if (!path.protocol) {
-                    path.protocol = 'https';
-                }
-                p = url.create(path);
                 if (this.renderChapterImage(p)) {
                     pages.push(encodeURI(p));
                 }
@@ -4493,7 +4410,7 @@ class MangaStreamParser {
 }
 exports.MangaStreamParser = MangaStreamParser;
 
-},{"./LanguageUtils":89,"entities":72,"simple-url":87}],93:[function(require,module,exports){
+},{"./LanguageUtils":89,"entities":72}],93:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.URLBuilder = void 0;
