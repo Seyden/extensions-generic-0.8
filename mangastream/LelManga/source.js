@@ -3926,7 +3926,11 @@ class MangaStream {
     }
     async getChapters(mangaId) {
         const $ = await this.getMangaData(mangaId);
-        return await this.parser.parseChapterList($, mangaId, this);
+        const chapters = await this.parser.parseChapterList($, mangaId, this);
+        if (!Array.isArray(chapters) || chapters.length == 0) {
+            throw new Error(`Couldn't find any chapters for mangaId ${mangaId}, throwing an error to prevent loosing reading progress`);
+        }
+        return chapters;
     }
     async getChapterSlug(mangaId, chapterId) {
         const chapterKey = `${mangaId}:${chapterId}`;
@@ -3954,7 +3958,7 @@ class MangaStream {
         const page = metadata?.page ?? 1;
         const request = await this.constructSearchRequest(page, query);
         const response = await this.requestManager.schedule(request, 1);
-        this.CloudFlareError(response.status);
+        this.CheckResponseErrors(response);
         const $ = this.cheerio.load(response.data);
         const results = await this.parser.parseSearchResults($, this);
         const manga = [];
@@ -4086,7 +4090,7 @@ class MangaStream {
             method: 'HEAD'
         });
         const headResponse = await this.requestManager.schedule(headRequest, 1);
-        this.CloudFlareError(headResponse.status);
+        this.CheckResponseErrors(headResponse);
         let postId;
         const postIdRegex = headResponse?.headers.Link?.match(/\?p=(\d+)/);
         if (postIdRegex?.[1]) {
@@ -4121,7 +4125,7 @@ class MangaStream {
             method
         });
         const response = await this.requestManager.schedule(request, 1);
-        this.CloudFlareError(response.status);
+        this.CheckResponseErrors(response);
         return this.cheerio.load(response.data);
     }
     async getCloudflareBypassRequestAsync() {
@@ -4135,9 +4139,14 @@ class MangaStream {
             }
         });
     }
-    CloudFlareError(status) {
-        if (status == 503 || status == 403) {
-            throw new Error('CLOUDFLARE DETECTED:\nDo the Cloudflare bypass by clicking the cloud icon!');
+    CheckResponseErrors(response) {
+        const status = response.status;
+        switch (status) {
+            case 403:
+            case 503:
+                throw new Error('CLOUDFLARE DETECTED:\nDo the Cloudflare bypass by clicking the cloud icon!');
+            case 404:
+                throw new Error(`The requested page ${response.request.url} was not found!`);
         }
     }
 }
