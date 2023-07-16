@@ -4408,6 +4408,7 @@ class SushiScan extends MangaStream_1.MangaStream {
         super(...arguments);
         this.baseUrl = SUSHI_SCAN_DOMAIN;
         this.language = '🇫🇷';
+        this.sourceTraversalPathName = 'catalogue';
         this.manga_tag_selector_box = 'div.seriestugenre';
         this.manga_selector_artist = 'Dessinateur';
         this.manga_selector_author = 'Auteur';
