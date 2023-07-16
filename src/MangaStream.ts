@@ -5,6 +5,7 @@ import {
     HomeSection,
     LanguageCode,
     Manga,
+    MangaTile,
     MangaUpdates,
     PagedResults,
     SearchRequest,
@@ -18,6 +19,11 @@ import {
     MangaStreamParser,
     UpdatedManga
 } from './MangaStreamParser'
+import { URLBuilder } from './UrlBuilder'
+import {
+    getFilterTagsBySection,
+    getIncludedTagBySection
+} from './MangaStreamHelper'
 
 interface TimeAgo {
     now: string[],
@@ -67,6 +73,8 @@ export abstract class MangaStream extends Source {
      */
     abstract languageCode: LanguageCode
 
+    stateManager = createSourceStateManager({})
+
     //----GENERAL SELECTORS----
     /**
      * The pathname between the domain and the manga.
@@ -80,6 +88,11 @@ export abstract class MangaStream extends Source {
      * Default = "https://i.imgur.com/GYUxEX8.png"
      */
     fallbackImage = 'https://i.imgur.com/GYUxEX8.png'
+
+    /**
+     * If it's not possible to use postIds for certain reasons, you can disable this here.
+     */
+    usePostIds = true
 
     /**
      * Sets the to be used UserAgent for requests
@@ -255,39 +268,42 @@ export abstract class MangaStream extends Source {
 
     parser = new MangaStreamParser();
 
-    override getMangaShareUrl(mangaId: string): string {
-        return `${this.baseUrl}/${this.sourceTraversalPathName}/${mangaId}/`
+    getMangaShareUrl(mangaId: string): string {
+        return this.usePostIds
+               ? `${this.baseUrl}/?p=${mangaId}/`
+               : `${this.baseUrl}/${this.sourceTraversalPathName}/${mangaId}/`
     }
 
+    getMangaData = async (mangaId: string): Promise<CheerioStatic> => await this.loadRequestData(this.getMangaShareUrl(mangaId))
+
     override async getMangaDetails(mangaId: string): Promise<Manga> {
-        const request = createRequestObject({
-            url: `${this.baseUrl}/${this.sourceTraversalPathName}/${mangaId}/`,
-            method: 'GET'
-        })
-
-        const response = await this.requestManager.schedule(request, 1)
-        this.CloudFlareError(response.status)
-        const $ = this.cheerio.load(response.data)
-
+        const $ = await this.getMangaData(mangaId)
         return this.parser.parseMangaDetails($, mangaId, this)
     }
 
     override async getChapters(mangaId: string): Promise<Chapter[]> {
-        const request = createRequestObject({
-            url: `${this.baseUrl}/${this.sourceTraversalPathName}/${mangaId}/`,
-            method: 'GET'
-        })
-
-        const response = await this.requestManager.schedule(request, 1)
-        this.CloudFlareError(response.status)
-        const $ = this.cheerio.load(response.data)
-
+        const $ = await this.getMangaData(mangaId)
         return this.parser.parseChapterList($, mangaId, this)
     }
 
     override async getChapterDetails(mangaId: string, chapterId: string): Promise<ChapterDetails> {
+        let chapterLink: string = chapterId
+        const chapterKey = `${mangaId}:${chapterId}`
+        let existingMappedChapter = await this.stateManager.retrieve(chapterKey)
+        if (existingMappedChapter == null) {
+            await this.getChapters(mangaId)
+        }
+
+        existingMappedChapter = await this.stateManager.retrieve(chapterKey)
+        if (existingMappedChapter == null) {
+            throw new Error(`Could not parse out Chapter Link when getting chapter details for postId: ${mangaId} chapterId: ${chapterId}`)
+        }
+
+        chapterLink = existingMappedChapter.toString()
+
+
         const request = createRequestObject({
-            url: `${this.baseUrl}/${chapterId}/`,
+            url: `${this.baseUrl}/${chapterLink}/`,
             method: 'GET'
         })
 
@@ -310,7 +326,7 @@ export abstract class MangaStream extends Source {
         return this.parser.parseTags($, this)
     }
 
-    override async getSearchResults(query: SearchRequest, metadata: any): Promise<PagedResults> {
+    /*override async getSearchResults(query: SearchRequest, metadata: any): Promise<PagedResults> {
         const page = metadata?.page ?? 1
         let request
 
@@ -338,6 +354,69 @@ export abstract class MangaStream extends Source {
             results: manga,
             metadata
         })
+    }*/
+
+    async getSearchResults(query: SearchRequest, metadata: any): Promise<PagedResults> {
+        const page: number = metadata?.page ?? 1
+
+        const request = await this.constructSearchRequest(page, query)
+        const response = await this.requestManager.schedule(request, 1)
+        this.CloudFlareError(response.status)
+        const $ = this.cheerio.load(response.data as string)
+        const results = await this.parser.parseSearchResults($, this)
+
+        /*const manga: MangaTile[] = []
+        for (const result of results) {
+            let mangaId: string = result.slug
+            if (this.usePostIds) {
+                mangaId = await this.slugToPostId(result.slug, result.path)
+            }
+
+            manga.push(createMangaTile({
+                id: mangaId,
+                image: result.image,
+                title: result.title,
+                subtitleText: result.subtitle
+            }))
+        }*/
+
+        metadata = !this.parser.isLastPage($, 'search_request')
+                   ? { page: page + 1 }
+                   : undefined
+
+        return createPagedResults({
+            results: results,
+            metadata
+        })
+    }
+
+    async constructSearchRequest(page: number, query: SearchRequest): Promise<any> {
+        let urlBuilder: URLBuilder = new URLBuilder(this.baseUrl)
+        .addPathComponent(this.sourceTraversalPathName)
+        .addQueryParameter('page', page.toString())
+
+        if (query?.title) {
+            urlBuilder = urlBuilder.addQueryParameter('s', encodeURIComponent(query?.title.replace(/[’–][a-z]*/g, '') ?? ''))
+        } else {
+            urlBuilder = urlBuilder
+            .addQueryParameter('genre', getFilterTagsBySection('genres', query?.includedTags ?? [], true))
+            .addQueryParameter('genre', getFilterTagsBySection('genres', query?.excludedTags ?? [], false, await this.supportsTagExclusion()))
+            .addQueryParameter('status', getIncludedTagBySection('status', query?.includedTags ?? []))
+            .addQueryParameter('type', getIncludedTagBySection('type', query?.includedTags ?? []))
+            .addQueryParameter('order', getIncludedTagBySection('order', query?.includedTags ?? []))
+        }
+
+        return createRequestObject({
+            url: urlBuilder.buildUrl({
+                addTrailingSlash: true,
+                includeUndefinedParameters: false
+            }),
+            method: 'GET'
+        })
+    }
+
+    async supportsTagExclusion(): Promise<boolean> {
+        return false
     }
 
     override async filterUpdatedManga(mangaUpdatesFoundCallback: (updates: MangaUpdates) => void, time: Date, ids: string[]): Promise<void> {
@@ -356,7 +435,7 @@ export abstract class MangaStream extends Source {
             const response = await this.requestManager.schedule(request, 1)
             const $ = this.cheerio.load(response.data)
 
-            updatedManga = this.parser.parseUpdatedManga($, time, ids, this)
+            updatedManga = await this.parser.parseUpdatedManga($, time, ids, this)
             if (updatedManga.ids.length > 0) {
                 mangaUpdatesFoundCallback(createMangaUpdates({
                     ids: updatedManga.ids
@@ -390,7 +469,7 @@ export abstract class MangaStream extends Source {
         const response = await this.requestManager.schedule(request, 1)
         this.CloudFlareError(response.status)
         const $ = this.cheerio.load(response.data)
-        this.parser.parseHomeSections($, sections, sectionCallback, this)
+        await this.parser.parseHomeSections($, sections, sectionCallback, this)
     }
 
     override async getViewMoreItems(homepageSectionId: string, metadata: any): Promise<PagedResults> {
@@ -419,12 +498,117 @@ export abstract class MangaStream extends Source {
         const response = await this.requestManager.schedule(request, 1)
         const $ = this.cheerio.load(response.data)
 
-        const manga = this.parser.parseViewMore($, this)
+        const manga = await this.parser.parseViewMore($, this)
         metadata = !this.parser.isLastPage($, 'view_more') ? { page: page + 1 } : undefined
         return createPagedResults({
             results: manga,
             metadata
         })
+    }
+
+    async slugToPostId(slug: string, path: string): Promise<string> {
+        if ((await this.stateManager.retrieve(slug)) == null) {
+            const postId = await this.convertSlugToPostId(slug, path)
+
+            const existingMappedSlug = await this.stateManager.retrieve(postId)
+            if (existingMappedSlug != null) {
+                await this.stateManager.store(slug, undefined)
+            }
+
+            await this.stateManager.store(postId, slug)
+            await this.stateManager.store(slug, postId)
+        }
+
+        const postId = await this.stateManager.retrieve(slug)
+        if (!postId) {
+            throw new Error(`Unable to fetch postId for slug:${slug}`)
+        }
+
+        return postId.toString()
+    }
+
+    async convertPostIdToSlug(postId: number): Promise<any> {
+        const $ = await this.loadRequestData(`${this.baseUrl}/?p=${postId}`)
+
+        let parseSlug: any
+        // Step 1: Try to get slug from og-url
+        parseSlug = String($('meta[property="og:url"]').attr('content'))
+
+        // Step 2: Try to get slug from canonical
+        if (!parseSlug.includes(this.baseUrl)) {
+            parseSlug = String($('link[rel="canonical"]').attr('href'))
+        }
+
+        if (!parseSlug || !parseSlug.includes(this.baseUrl)) {
+            throw new Error('Unable to parse slug!')
+        }
+
+        parseSlug = parseSlug.replace(/\/$/, '').split('/')
+
+        const slug = parseSlug.slice(-1).pop()
+        const path = parseSlug.slice(-2).shift()
+
+        return {
+            path,
+            slug
+        }
+    }
+
+    async convertSlugToPostId(slug: string, path: string): Promise<string> {
+        // Credit to the MadaraDex team :-D
+        const headRequest = createRequestObject({
+            url: `${this.baseUrl}/${path}/${slug}/`,
+            method: 'HEAD'
+        })
+        const headResponse = await this.requestManager.schedule(headRequest, 1)
+        this.CloudFlareError(headResponse.status)
+
+        let postId: any
+
+        const postIdRegex = headResponse?.headers.Link?.match(/\?p=(\d+)/)
+        if (postIdRegex?.[1]) {
+            postId = postIdRegex[1]
+        }
+
+        if (postId || !isNaN(Number(postId))) {
+            return postId?.toString()
+        }
+
+        const $ = await this.loadRequestData(`${this.baseUrl}/${path}/${slug}/`)
+
+        // Step 1: Try to get postId from shortlink
+        postId = Number($('link[rel="shortlink"]')?.attr('href')?.split('/?p=')[1])
+
+        // Step 2: If no number has been found, try to parse from data-id
+        if (isNaN(postId)) {
+            postId = Number($('div.bookmark').attr('data-id'))
+        }
+
+        // Step 3: If no number has been found, try to parse from manga script
+        if (isNaN(postId)) {
+            const page = $.root().html()
+            const match = page?.match(/postID.*\D(\d+)/)
+            if (match != null && match[1]) {
+                postId = Number(match[1]?.trim())
+            }
+        }
+
+        if (!postId || isNaN(postId)) {
+            throw new Error(`Unable to fetch numeric postId for this item! (path:${path} slug:${slug})`)
+        }
+
+        return postId.toString()
+    }
+
+    async loadRequestData(url: string, method: string = 'GET'): Promise<CheerioStatic> {
+        const request = createRequestObject({
+            url,
+            method
+        })
+
+        const response = await this.requestManager.schedule(request, 1)
+        this.CloudFlareError(response.status)
+        return this.cheerio.load(response.data as string)
     }
 
     override getCloudflareBypassRequest() {

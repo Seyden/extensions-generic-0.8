@@ -74,7 +74,7 @@ export class MangaStreamParser {
         })
     }
 
-    parseChapterList($: CheerioSelector, mangaId: string, source: any): Chapter[] {
+    async parseChapterList($: CheerioSelector, mangaId: string, source: any): Promise<Chapter[]> {
         const chapters: Chapter[] = []
         let sortingIndex = 0
 
@@ -84,22 +84,25 @@ export class MangaStreamParser {
 
         for (const chapter of $(source.chapter_selector_item, source.chapter_selector_box).toArray()) {
             const title = $('span.chapternum', chapter).text().trim()
-            const id = this.idCleaner($('a', chapter).attr('href') ?? '')
+            const link = this.idCleaner($('a', chapter).attr('href') ?? '')
             const date = convertDate($('span.chapterdate', chapter).text().trim(), source)
             const getNumber = chapter.attribs['data-num'] ?? ''
             const chapterNumberRegex = getNumber.match(/(\d+\.?\d?)+/)
             let chapterNumber = 0
             if (chapterNumberRegex && chapterNumberRegex[1]) chapterNumber = Number(chapterNumberRegex[1])
 
+            let id = chapterNumber.toString()
             if (!id) continue
+
+            await source.stateManager.store(`${mangaId}:${id}`, link)
+
             chapters.push({
                 id: id,
                 mangaId,
                 name: title,
                 langCode: langCode,
                 chapNum: chapterNumber,
-                time: date,
-                // @ts-ignore
+                time: date, // @ts-ignore
                 sortingIndex
             })
             sortingIndex--
@@ -150,7 +153,37 @@ export class MangaStreamParser {
         return tagSections
     }
 
-    parseSearchResults($: CheerioSelector, source: any): MangaTile[] {
+    async parseSearchResults($: CheerioSelector, source: any): Promise<MangaTile[]> {
+        const results: MangaTile[] = []
+
+        for (const obj of $('div.bs', 'div.listupd').toArray()) {
+            const slug: string = ($('a', obj).attr('href') ?? '').replace(/\/$/, '').split('/').pop() ?? ''
+            const path: string = ($('a', obj).attr('href') ?? '').replace(/\/$/, '').split('/').slice(-2).shift() ?? ''
+            if (!slug || !path) {
+                throw new Error(`Unable to parse slug (${slug}) or path (${path})!`)
+            }
+
+            const title: string = $('a', obj).attr('title') ?? ''
+            const image = this.getImageSrc($('img', obj))?.split('?resize')[0] ?? ''
+            const subtitle = $('div.epxs', obj).text().trim()
+
+            let mangaId: string = slug
+            if (source.usePostIds) {
+                mangaId = await source.slugToPostId(slug, path)
+            }
+
+            results.push(createMangaTile({
+                id: mangaId,
+                image: image ? image : source.fallbackImage,
+                title: createIconText({ text: this.decodeHTMLEntity(title) }),
+                subtitleText: createIconText({ text: subtitle }),
+            }))
+        }
+
+        return results
+    }
+
+    /*parseSearchResults($: CheerioSelector, source: any): MangaTile[] {
         const mangas: MangaTile[] = []
         const collectedIds: string[] = []
 
@@ -169,9 +202,9 @@ export class MangaStreamParser {
             collectedIds.push(id)
         }
         return mangas
-    }
+    }*/
 
-    parseUpdatedManga($: CheerioStatic, time: Date, ids: string[], source: any): UpdatedManga {
+    async parseUpdatedManga($: CheerioStatic, time: Date, ids: string[], source: any): Promise<UpdatedManga> {
         const updatedManga: string[] = []
         let loadMore = true
 
@@ -179,7 +212,14 @@ export class MangaStreamParser {
         if (!$(source.homescreen_LatestUpdate_selector_item, $(source.homescreen_LatestUpdate_selector_box)?.parent()?.next()).length) throw new Error('Unable to parse valid update section!')
 
         for (const manga of $(source.homescreen_LatestUpdate_selector_item, $(source.homescreen_LatestUpdate_selector_box).parent().next()).toArray()) {
-            const id = this.idCleaner($('a', manga).attr('href') ?? '')
+            const slug: string = this.idCleaner($('a', manga).attr('href') ?? '')
+            const path: string = ($('a', manga).attr('href') ?? '').replace(/\/$/, '').split('/').slice(-2).shift() ?? ''
+            const postId = $('a', manga).attr('rel')
+            const id: string = source.usePostIds
+                               ? (isNaN(Number(postId))
+                                  ? await source.slugToPostId(slug, path)
+                                  : postId)
+                               : slug
             const mangaDate = convertDateAgo($('li > span', $('div.luf, ul.chfiv', manga)).first().text().trim(), source)
 
             //Check if manga time is older than the time provided, is this manga has an update. Return this.
@@ -204,7 +244,7 @@ export class MangaStreamParser {
         }
     }
 
-    parseHomeSections($: CheerioStatic, sections: HomeSection[], sectionCallback: (section: HomeSection) => void, source: any) {
+    async parseHomeSections($: CheerioStatic, sections: HomeSection[], sectionCallback: (section: HomeSection) => void, source: any) {
         for (const section of sections) {
             //Popular Today
             if (section.id == 'popular_today') {
@@ -214,14 +254,25 @@ export class MangaStreamParser {
                     continue
                 }
                 for (const manga of $('div.bsx', $(source.homescreen_PopularToday_selector).parent().next()).toArray()) {
-                    const id = this.idCleaner($('a', manga).attr('href') ?? '')
                     const title = $('a', manga).attr('title')
                     const image = this.getImageSrc($('img', manga))?.split('?resize')[0] ?? ''
                     const subtitle = $('div.epxs', manga).text().trim()
+
+                    const slug: string = this.idCleaner($('a', manga).attr('href') ?? '')
+                    const path: string = ($('a', manga).attr('href') ?? '').replace(/\/$/, '').split('/').slice(-2).shift() ?? ''
+                    const postId = $('a', manga).attr('rel')
+                    const id: string = source.usePostIds
+                                       ? (isNaN(Number(postId))
+                                          ? await source.slugToPostId(slug, path)
+                                          : postId)
+                                       : slug
+
                     if (!id || !title) continue
                     popularToday.push(createMangaTile({
                         id: id,
-                        image: image ? image : source.fallbackImage,
+                        image: image
+                               ? image
+                               : source.fallbackImage,
                         title: createIconText({ text: this.decodeHTMLEntity(title) }),
                         subtitleText: createIconText({ text: subtitle }),
                     }))
@@ -238,14 +289,25 @@ export class MangaStreamParser {
                     continue
                 }
                 for (const manga of $(source.homescreen_LatestUpdate_selector_item, $(source.homescreen_LatestUpdate_selector_box).parent().next()).toArray()) {
-                    const id = this.idCleaner($('a', manga).attr('href') ?? '')
                     const title = $('a', manga).attr('title')
                     const image = this.getImageSrc($('img', manga))?.split('?resize')[0] ?? ''
                     const subtitle = $('li > span', $('div.luf', manga)).first().text().trim()
+
+                    const slug: string = this.idCleaner($('a', manga).attr('href') ?? '')
+                    const path: string = ($('a', manga).attr('href') ?? '').replace(/\/$/, '').split('/').slice(-2).shift() ?? ''
+                    const postId = $('a', manga).attr('rel')
+                    const id: string = source.usePostIds
+                                       ? (isNaN(Number(postId))
+                                          ? await source.slugToPostId(slug, path)
+                                          : postId)
+                                       : slug
+
                     if (!id || !title) continue
                     latestUpdate.push(createMangaTile({
                         id: id,
-                        image: image ? image : source.fallbackImage,
+                        image: image
+                               ? image
+                               : source.fallbackImage,
                         title: createIconText({ text: this.decodeHTMLEntity(title) }),
                         subtitleText: createIconText({ text: subtitle }),
                     }))
@@ -262,13 +324,24 @@ export class MangaStreamParser {
                     continue
                 }
                 for (const manga of $('li', $(source.homescreen_NewManga_selector).parent().next()).toArray()) {
-                    const id = this.idCleaner($('a', manga).attr('href') ?? '')
                     const title = $('h2', manga).text().trim()
                     const image = this.getImageSrc($('img', manga))?.split('?resize')[0] ?? ''
+
+                    const slug: string = this.idCleaner($('a', manga).attr('href') ?? '')
+                    const path: string = ($('a', manga).attr('href') ?? '').replace(/\/$/, '').split('/').slice(-2).shift() ?? ''
+                    const postId = $('a', manga).attr('rel')
+                    const id: string = source.usePostIds
+                                       ? (isNaN(Number(postId))
+                                          ? await source.slugToPostId(slug, path)
+                                          : postId)
+                                       : slug
+
                     if (!id || !title) continue
                     NewTitles.push(createMangaTile({
                         id: id,
-                        image: image ? image : source.fallbackImage,
+                        image: image
+                               ? image
+                               : source.fallbackImage,
                         title: createIconText({ text: this.decodeHTMLEntity(title) }),
                     }))
                 }
@@ -280,13 +353,24 @@ export class MangaStreamParser {
             if (section.id == 'top_alltime') {
                 const TopAllTime: MangaTile[] = []
                 for (const manga of $('li', source.homescreen_TopAllTime_selector).toArray()) {
-                    const id = this.idCleaner($('a', manga).attr('href') ?? '')
                     const title = $('h2', manga).text().trim()
                     const image = this.getImageSrc($('img', manga))?.split('?resize')[0] ?? ''
+
+                    const slug: string = this.idCleaner($('a', manga).attr('href') ?? '')
+                    const path: string = ($('a', manga).attr('href') ?? '').replace(/\/$/, '').split('/').slice(-2).shift() ?? ''
+                    const postId = $('a', manga).attr('rel')
+                    const id: string = source.usePostIds
+                                       ? (isNaN(Number(postId))
+                                          ? await source.slugToPostId(slug, path)
+                                          : postId)
+                                       : slug
+
                     if (!id || !title) continue
                     TopAllTime.push(createMangaTile({
                         id: id,
-                        image: image ? image : source.fallbackImage,
+                        image: image
+                               ? image
+                               : source.fallbackImage,
                         title: createIconText({ text: this.decodeHTMLEntity(title) }),
                     }))
                 }
@@ -298,13 +382,24 @@ export class MangaStreamParser {
             if (section.id == 'top_monthly') {
                 const TopMonthly: MangaTile[] = []
                 for (const manga of $('li', source.homescreen_TopMonthly_selector).toArray()) {
-                    const id = this.idCleaner($('a', manga).attr('href') ?? '')
                     const title = $('h2', manga).text().trim()
                     const image = this.getImageSrc($('img', manga))?.split('?resize')[0] ?? ''
+
+                    const slug: string = this.idCleaner($('a', manga).attr('href') ?? '')
+                    const path: string = ($('a', manga).attr('href') ?? '').replace(/\/$/, '').split('/').slice(-2).shift() ?? ''
+                    const postId = $('a', manga).attr('rel')
+                    const id: string = source.usePostIds
+                                       ? (isNaN(Number(postId))
+                                          ? await source.slugToPostId(slug, path)
+                                          : postId)
+                                       : slug
+
                     if (!id || !title) continue
                     TopMonthly.push(createMangaTile({
                         id: id,
-                        image: image ? image : source.fallbackImage,
+                        image: image
+                               ? image
+                               : source.fallbackImage,
                         title: createIconText({ text: this.decodeHTMLEntity(title) }),
                     }))
                 }
@@ -316,13 +411,24 @@ export class MangaStreamParser {
             if (section.id == 'top_weekly') {
                 const TopWeekly: MangaTile[] = []
                 for (const manga of $('li', source.homescreen_TopWeekly_selector).toArray()) {
-                    const id = this.idCleaner($('a', manga).attr('href') ?? '')
                     const title = $('h2', manga).text().trim()
                     const image = this.getImageSrc($('img', manga))?.split('?resize')[0] ?? ''
+
+                    const slug: string = this.idCleaner($('a', manga).attr('href') ?? '')
+                    const path: string = ($('a', manga).attr('href') ?? '').replace(/\/$/, '').split('/').slice(-2).shift() ?? ''
+                    const postId = $('a', manga).attr('rel')
+                    const id: string = source.usePostIds
+                                       ? (isNaN(Number(postId))
+                                          ? await source.slugToPostId(slug, path)
+                                          : postId)
+                                       : slug
+
                     if (!id || !title) continue
                     TopWeekly.push(createMangaTile({
                         id: id,
-                        image: image ? image : source.fallbackImage,
+                        image: image
+                               ? image
+                               : source.fallbackImage,
                         title: createIconText({ text: this.decodeHTMLEntity(title) }),
                     }))
                 }
@@ -332,19 +438,32 @@ export class MangaStreamParser {
         }
     }
 
-    parseViewMore = ($: CheerioStatic, source: any): MangaTile[] => {
+    parseViewMore = async ($: CheerioStatic, source: any): Promise<MangaTile[]> => {
         const mangas: MangaTile[] = []
         const collectedIds: string[] = []
 
         for (const manga of $('div.bs', 'div.listupd').toArray()) {
-            const id = this.idCleaner($('a', manga).attr('href') ?? '')
             const title = $('a', manga).attr('title')
             const image = this.getImageSrc($('img', manga))?.split('?resize')[0] ?? ''
             const subtitle = $('div.epxs', manga).text().trim()
-            if (collectedIds.includes(id) || !id || !title) continue
+
+            const slug: string = this.idCleaner($('a', manga).attr('href') ?? '')
+            const path: string = ($('a', manga).attr('href') ?? '').replace(/\/$/, '').split('/').slice(-2).shift() ?? ''
+            const postId = $('a', manga).attr('rel')
+            const id: string = source.usePostIds
+                               ? (isNaN(Number(postId))
+                                  ? await source.slugToPostId(slug, path)
+                                  : postId)
+                               : slug
+
+            if (collectedIds.includes(id) || !id || !title)
+                continue
+
             mangas.push(createMangaTile({
                 id,
-                image: image ? image : source.fallbackImage,
+                image: image
+                       ? image
+                       : source.fallbackImage,
                 title: createIconText({ text: this.decodeHTMLEntity(title) }),
                 subtitleText: createIconText({ text: subtitle }),
             }))

@@ -9,7 +9,7 @@ import { convertDateAgo } from '../LanguageUtils'
 
 export class ManhwaXParser extends MangaStreamParser {
 
-    override parseUpdatedManga($: CheerioStatic, time: Date, ids: string[], source: ManhwaX): UpdatedManga {
+    override async parseUpdatedManga($: CheerioStatic, time: Date, ids: string[], source: ManhwaX): Promise<UpdatedManga> {
         const updatedManga: string[] = []
         let loadMore = true
         const isLast = this.isLastPage($, 'view_more') //Check if it's the last page or not, needed for some sites!
