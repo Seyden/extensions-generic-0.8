@@ -3645,7 +3645,7 @@ const UrlBuilder_1 = require("./UrlBuilder");
 const MangaStreamHelper_1 = require("./MangaStreamHelper");
 const simpleUrl = require('simple-url');
 // Set the version for the base, changing this version will change the versions of all sources
-const BASE_VERSION = '3.0.0';
+const BASE_VERSION = '3.0.1';
 const getExportVersion = (EXTENSION_VERSION) => {
     return BASE_VERSION.split('.')
         .map((x, index) => Number(x) + Number(EXTENSION_VERSION.split('.')[index]))
@@ -3663,10 +3663,11 @@ class MangaStream {
             requestTimeout: 15000,
             interceptor: {
                 interceptRequest: async (request) => {
+                    const url = await this.getBaseUrl();
                     request.headers = {
                         ...(request.headers ?? {}), ...{
                             'user-agent': await this.requestManager.getDefaultUserAgent(),
-                            referer: `${this.baseUrl}/`, ...((request.url.includes('wordpress.com') || request.url.includes('wp.com')) && {
+                            referer: `${url}/`, ...((request.url.includes('wordpress.com') || request.url.includes('wp.com')) && {
                                 Accept: 'image/avif,image/webp,*/*'
                             }) // Used for images hosted on Wordpress blogs
                         }
@@ -3825,11 +3826,11 @@ class MangaStream {
             header: 'Source Menu',
             isHidden: false,
             rows: async () => [
-                this.sourceSettings()
+                this.sourceSettings(this.stateManager)
             ]
         });
     }
-    sourceSettings() {
+    sourceSettings(stateManager) {
         return App.createDUINavigationButton({
             id: 'mangastream_settings',
             label: 'Source Settings',
@@ -3844,8 +3845,8 @@ class MangaStream {
                                 id: 'domain_url',
                                 label: 'Domain',
                                 value: App.createDUIBinding({
-                                    get: async () => this.baseUrl,
-                                    set: async (newValue) => this.baseUrl = newValue
+                                    get: async () => await this.getBaseUrl(),
+                                    set: async (newValue) => await stateManager.store('Domain', newValue)
                                 })
                             })
                         ]
@@ -3855,6 +3856,9 @@ class MangaStream {
         });
     }
     interceptResponse(response) {
+    }
+    async getBaseUrl() {
+        return await this.stateManager.retrieve('Domain') ?? this.baseUrl;
     }
     // ----HOMESCREEN SELECTORS----
     /**
@@ -3866,9 +3870,11 @@ class MangaStream {
     configureSections() {
     }
     getMangaShareUrl(mangaId) {
+        let url = '';
+        this.getBaseUrl().then(baseUrl => url = baseUrl);
         return this.usePostIds
-            ? `${this.baseUrl}/?p=${mangaId}/`
-            : `${this.baseUrl}/${this.sourceTraversalPathName}/${mangaId}/`;
+            ? `${url}/?p=${mangaId}/`
+            : `${url}/${this.sourceTraversalPathName}/${mangaId}/`;
     }
     async getMangaDetails(mangaId) {
         const $ = await this.getMangaData(mangaId);
@@ -3896,12 +3902,14 @@ class MangaStream {
         return existingMappedChapterLink;
     }
     async getChapterDetails(mangaId, chapterId) {
-        let chapterLink = await this.getChapterSlug(mangaId, chapterId);
-        const $ = await this.loadRequestData(`${this.baseUrl}/${chapterLink}/`);
+        const chapterLink = await this.getChapterSlug(mangaId, chapterId);
+        const url = await this.getBaseUrl();
+        const $ = await this.loadRequestData(`${url}/${chapterLink}/`);
         return this.parser.parseChapterDetails($, mangaId, chapterId);
     }
     async getSearchTags() {
-        const $ = await this.loadRequestData(`${this.baseUrl}/${this.sourceTraversalPathName}`);
+        const url = await this.getBaseUrl();
+        const $ = await this.loadRequestData(`${url}/${this.sourceTraversalPathName}`);
         return this.parser.parseTags($);
     }
     async getSearchResults(query, metadata) {
@@ -3933,7 +3941,8 @@ class MangaStream {
         });
     }
     async constructSearchRequest(page, query) {
-        let urlBuilder = new UrlBuilder_1.URLBuilder(this.baseUrl)
+        const url = await this.getBaseUrl();
+        let urlBuilder = new UrlBuilder_1.URLBuilder(url)
             .addPathComponent(this.sourceTraversalPathName)
             .addQueryParameter('page', page.toString());
         if (query?.title) {
@@ -3959,7 +3968,8 @@ class MangaStream {
         return false;
     }
     async getHomePageSections(sectionCallback) {
-        const $ = await this.loadRequestData(`${this.baseUrl}/`);
+        const url = await this.getBaseUrl();
+        const $ = await this.loadRequestData(`${url}/`);
         const promises = [];
         const sectionValues = Object.values(this.sections).sort((n1, n2) => n1.sortIndex - n2.sortIndex);
         for (const section of sectionValues) {
@@ -3987,7 +3997,8 @@ class MangaStream {
         if (!param) {
             throw new Error(`Invalid homeSectionId | ${homepageSectionId}`);
         }
-        const $ = await this.loadRequestData(`${this.baseUrl}/${param}`);
+        const url = await this.getBaseUrl();
+        const $ = await this.loadRequestData(`${url}/${param}`);
         const items = await this.parser.parseViewMore($, this);
         metadata = !this.parser.isLastPage($, 'view_more')
             ? { page: page + 1 }
@@ -4014,15 +4025,16 @@ class MangaStream {
         return postId;
     }
     async convertPostIdToSlug(postId) {
-        const $ = await this.loadRequestData(`${this.baseUrl}/?p=${postId}`);
+        const url = await this.getBaseUrl();
+        const $ = await this.loadRequestData(`${url}/?p=${postId}`);
         let parseSlug;
         // Step 1: Try to get slug from og-url
         parseSlug = String($('meta[property="og:url"]').attr('content'));
         // Step 2: Try to get slug from canonical
-        if (!parseSlug.includes(this.baseUrl)) {
+        if (!parseSlug.includes(url)) {
             parseSlug = String($('link[rel="canonical"]').attr('href'));
         }
-        if (!parseSlug || !parseSlug.includes(this.baseUrl)) {
+        if (!parseSlug || !parseSlug.includes(url)) {
             throw new Error('Unable to parse slug!');
         }
         parseSlug = parseSlug.replace(/\/$/, '').split('/');
@@ -4035,8 +4047,9 @@ class MangaStream {
     }
     async convertSlugToPostId(slug, path) {
         // Credit to the MadaraDex team :-D
+        const url = await this.getBaseUrl();
         const headRequest = App.createRequest({
-            url: `${this.baseUrl}/${path}/${slug}/`,
+            url: `${url}/${path}/${slug}/`,
             method: 'HEAD'
         });
         const headResponse = await this.requestManager.schedule(headRequest, 1);
@@ -4049,7 +4062,7 @@ class MangaStream {
         if (postId || !isNaN(Number(postId))) {
             return postId?.toString();
         }
-        const $ = await this.loadRequestData(`${this.baseUrl}/${path}/${slug}/`);
+        const $ = await this.loadRequestData(`${url}/${path}/${slug}/`);
         // Step 1: Try to get postId from shortlink
         postId = Number($('link[rel="shortlink"]')?.attr('href')?.split('/?p=')[1]);
         // Step 2: If no number has been found, try to parse from data-id
@@ -4079,12 +4092,13 @@ class MangaStream {
         return this.cheerio.load(response.data);
     }
     async getCloudflareBypassRequestAsync() {
+        const url = await this.getBaseUrl();
         return App.createRequest({
-            url: `${this.bypassPage || this.baseUrl}/`,
+            url: `${this.bypassPage || url}/`,
             method: 'GET',
             headers: {
-                'referer': `${this.baseUrl}/`,
-                'origin': `${this.baseUrl}/`,
+                'referer': `${url}/`,
+                'origin': `${url}/`,
                 'user-agent': await this.requestManager.getDefaultUserAgent()
             }
         });
