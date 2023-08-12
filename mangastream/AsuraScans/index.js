@@ -3841,6 +3841,41 @@ class MangaStream {
         this.getMangaData = async (mangaId) => await this.loadRequestData(this.getMangaShareUrl(mangaId));
         this.configureSections();
     }
+    async getSourceMenu() {
+        return App.createDUISection({
+            id: 'sourceMenu',
+            header: 'Source Menu',
+            isHidden: false,
+            rows: async () => [
+                this.sourceSettings()
+            ]
+        });
+    }
+    sourceSettings() {
+        return App.createDUINavigationButton({
+            id: 'mangastream_settings',
+            label: 'Source Settings',
+            form: App.createDUIForm({
+                sections: async () => [
+                    App.createDUISection({
+                        id: 'domain',
+                        isHidden: false,
+                        footer: 'Override the domain url for the source.',
+                        rows: async () => [
+                            App.createDUIInputField({
+                                id: 'domain_url',
+                                label: 'Domain',
+                                value: App.createDUIBinding({
+                                    get: async () => this.baseUrl,
+                                    set: async (newValue) => this.baseUrl = newValue
+                                })
+                            })
+                        ]
+                    })
+                ]
+            })
+        });
+    }
     interceptResponse(response) {
     }
     // ----HOMESCREEN SELECTORS----
