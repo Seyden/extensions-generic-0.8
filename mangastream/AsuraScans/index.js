@@ -3584,6 +3584,7 @@ exports.AsuraScans = exports.AsuraScansInfo = void 0;
 /* eslint-disable linebreak-style */
 const types_1 = require("@paperback/types");
 const MangaStream_1 = require("../MangaStream");
+const simpleUrl = require('simple-url');
 const AsuraScansParser_1 = require("./AsuraScansParser");
 const ASURASCANS_DOMAIN = 'https://asura.gg';
 exports.AsuraScansInfo = {
@@ -3595,35 +3596,30 @@ exports.AsuraScansInfo = {
     icon: 'icon.png',
     contentRating: types_1.ContentRating.MATURE,
     websiteBaseURL: ASURASCANS_DOMAIN,
-    intents: types_1.SourceIntents.MANGA_CHAPTERS | types_1.SourceIntents.HOMEPAGE_SECTIONS | types_1.SourceIntents.CLOUDFLARE_BYPASS_REQUIRED,
-    sourceTags: [
-        {
-            text: 'Notifications',
-            type: types_1.BadgeColor.GREEN
-        },
-        {
-            text: 'CloudFlare',
-            type: types_1.BadgeColor.RED
-        }
-    ]
+    intents: types_1.SourceIntents.MANGA_CHAPTERS | types_1.SourceIntents.HOMEPAGE_SECTIONS | types_1.SourceIntents.CLOUDFLARE_BYPASS_REQUIRED | types_1.SourceIntents.SETTINGS_UI,
+    sourceTags: []
 };
 class AsuraScans extends MangaStream_1.MangaStream {
     constructor() {
         super(...arguments);
         this.baseUrl = ASURASCANS_DOMAIN;
         this.parser = new AsuraScansParser_1.AsuraScansParser();
-        this.requestManager = App.createRequestManager({
-            requestsPerSecond: 2,
-            requestTimeout: 15000
-        });
     }
     configureSections() {
         this.sections['new_titles'].enabled = false;
     }
+    async interceptRequest(request) {
+        const path = simpleUrl.parse(request.url, true);
+        if (path.host.includes('asurascans')) {
+            const overridePath = simpleUrl.parse(await this.getAndSetBaseUrl(), true);
+            path.host = overridePath.host;
+            request.url = simpleUrl.create(path);
+        }
+    }
 }
 exports.AsuraScans = AsuraScans;
 
-},{"../MangaStream":91,"./AsuraScansParser":89,"@paperback/types":61}],89:[function(require,module,exports){
+},{"../MangaStream":91,"./AsuraScansParser":89,"@paperback/types":61,"simple-url":87}],89:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AsuraScansParser = void 0;
@@ -3667,7 +3663,7 @@ const UrlBuilder_1 = require("./UrlBuilder");
 const MangaStreamHelper_1 = require("./MangaStreamHelper");
 const simpleUrl = require('simple-url');
 // Set the version for the base, changing this version will change the versions of all sources
-const BASE_VERSION = '3.0.1';
+const BASE_VERSION = '3.0.3';
 const getExportVersion = (EXTENSION_VERSION) => {
     return BASE_VERSION.split('.')
         .map((x, index) => Number(x) + Number(EXTENSION_VERSION.split('.')[index]))
@@ -3678,6 +3674,29 @@ class MangaStream {
     constructor(cheerio) {
         this.cheerio = cheerio;
         this.stateManager = App.createSourceStateManager();
+        this.sourceSettings = (stateManager) => App.createDUINavigationButton({
+            id: 'mangastream_settings',
+            label: 'Source Settings',
+            form: App.createDUIForm({
+                sections: async () => [
+                    App.createDUISection({
+                        id: 'domain',
+                        isHidden: false,
+                        footer: 'Override the domain url for the source.',
+                        rows: async () => [
+                            App.createDUIInputField({
+                                id: 'domain_url',
+                                label: 'Domain',
+                                value: App.createDUIBinding({
+                                    get: async () => await this.getAndSetBaseUrl(),
+                                    set: async (newValue) => await stateManager.store('Domain', newValue)
+                                })
+                            })
+                        ]
+                    })
+                ]
+            })
+        });
         this.parser = new MangaStreamParser_1.MangaStreamParser();
         // ----REQUEST MANAGER----
         this.requestManager = App.createRequestManager({
@@ -3685,10 +3704,10 @@ class MangaStream {
             requestTimeout: 15000,
             interceptor: {
                 interceptRequest: async (request) => {
-                    const url = await this.getBaseUrl();
+                    const url = await this.getAndSetBaseUrl();
                     request.headers = {
                         ...(request.headers ?? {}), ...{
-                            'user-agent': await this.requestManager.getDefaultUserAgent(),
+                            //'user-agent': await this.requestManager.getDefaultUserAgent(),
                             referer: `${url}/`, ...((request.url.includes('wordpress.com') || request.url.includes('wp.com')) && {
                                 Accept: 'image/avif,image/webp,*/*'
                             }) // Used for images hosted on Wordpress blogs
@@ -3699,6 +3718,18 @@ class MangaStream {
                         path.protocol = 'https';
                         request.url = simpleUrl.create(path);
                     }
+                    await this.interceptRequest(request);
+                    if ((0, MangaStreamHelper_1.isImgLink)(request.url)) {
+                        let overrideUrl = await this.stateManager.retrieve('Domain');
+                        if (overrideUrl && overrideUrl != this.baseUrl) {
+                            const basePath = simpleUrl.parse(this.baseUrl, true);
+                            const overridePath = simpleUrl.parse(overrideUrl, true);
+                            if (path.host.includes(basePath.host) || path.host.includes(overridePath.host)) {
+                                path.host = overridePath.host;
+                                request.url = simpleUrl.create(path);
+                            }
+                        }
+                    }
                     return request;
                 },
                 interceptResponse: async (response) => {
@@ -3707,6 +3738,10 @@ class MangaStream {
                 }
             }
         });
+        /**
+         * The URL of the website. Eg. https://mangadark.com without a trailing slash
+         */
+        this.finalUrl = '';
         /**
          * The language code which this source supports.
          */
@@ -3852,35 +3887,14 @@ class MangaStream {
             ]
         });
     }
-    sourceSettings(stateManager) {
-        return App.createDUINavigationButton({
-            id: 'mangastream_settings',
-            label: 'Source Settings',
-            form: App.createDUIForm({
-                sections: async () => [
-                    App.createDUISection({
-                        id: 'domain',
-                        isHidden: false,
-                        footer: 'Override the domain url for the source.',
-                        rows: async () => [
-                            App.createDUIInputField({
-                                id: 'domain_url',
-                                label: 'Domain',
-                                value: App.createDUIBinding({
-                                    get: async () => await this.getBaseUrl(),
-                                    set: async (newValue) => await stateManager.store('Domain', newValue)
-                                })
-                            })
-                        ]
-                    })
-                ]
-            })
-        });
-    }
     interceptResponse(response) {
     }
-    async getBaseUrl() {
-        return await this.stateManager.retrieve('Domain') ?? this.baseUrl;
+    async interceptRequest(request) {
+    }
+    async getAndSetBaseUrl() {
+        let url = await this.stateManager.retrieve('Domain') ?? this.baseUrl;
+        this.finalUrl = url;
+        return url;
     }
     // ----HOMESCREEN SELECTORS----
     /**
@@ -3892,13 +3906,13 @@ class MangaStream {
     configureSections() {
     }
     getMangaShareUrl(mangaId) {
-        let url = '';
-        this.getBaseUrl().then(baseUrl => url = baseUrl);
         return this.usePostIds
-            ? `${url}/?p=${mangaId}/`
-            : `${url}/${this.sourceTraversalPathName}/${mangaId}/`;
+            ? `${this.finalUrl}/?p=${mangaId}/`
+            : `${this.finalUrl}/${this.sourceTraversalPathName}/${mangaId}/`;
     }
     async getMangaDetails(mangaId) {
+        console.log('getMangaDetails');
+        await this.getAndSetBaseUrl();
         const $ = await this.getMangaData(mangaId);
         return this.parser.parseMangaDetails($, mangaId, this);
     }
@@ -3925,12 +3939,12 @@ class MangaStream {
     }
     async getChapterDetails(mangaId, chapterId) {
         const chapterLink = await this.getChapterSlug(mangaId, chapterId);
-        const url = await this.getBaseUrl();
+        const url = await this.getAndSetBaseUrl();
         const $ = await this.loadRequestData(`${url}/${chapterLink}/`);
         return this.parser.parseChapterDetails($, mangaId, chapterId);
     }
     async getSearchTags() {
-        const url = await this.getBaseUrl();
+        const url = await this.getAndSetBaseUrl();
         const $ = await this.loadRequestData(`${url}/${this.sourceTraversalPathName}`);
         return this.parser.parseTags($);
     }
@@ -3963,7 +3977,7 @@ class MangaStream {
         });
     }
     async constructSearchRequest(page, query) {
-        const url = await this.getBaseUrl();
+        const url = await this.getAndSetBaseUrl();
         let urlBuilder = new UrlBuilder_1.URLBuilder(url)
             .addPathComponent(this.sourceTraversalPathName)
             .addQueryParameter('page', page.toString());
@@ -3990,7 +4004,7 @@ class MangaStream {
         return false;
     }
     async getHomePageSections(sectionCallback) {
-        const url = await this.getBaseUrl();
+        const url = await this.getAndSetBaseUrl();
         const $ = await this.loadRequestData(`${url}/`);
         const promises = [];
         const sectionValues = Object.values(this.sections).sort((n1, n2) => n1.sortIndex - n2.sortIndex);
@@ -4019,7 +4033,7 @@ class MangaStream {
         if (!param) {
             throw new Error(`Invalid homeSectionId | ${homepageSectionId}`);
         }
-        const url = await this.getBaseUrl();
+        const url = await this.getAndSetBaseUrl();
         const $ = await this.loadRequestData(`${url}/${param}`);
         const items = await this.parser.parseViewMore($, this);
         metadata = !this.parser.isLastPage($, 'view_more')
@@ -4047,7 +4061,7 @@ class MangaStream {
         return postId;
     }
     async convertPostIdToSlug(postId) {
-        const url = await this.getBaseUrl();
+        const url = await this.getAndSetBaseUrl();
         const $ = await this.loadRequestData(`${url}/?p=${postId}`);
         let parseSlug;
         // Step 1: Try to get slug from og-url
@@ -4069,7 +4083,7 @@ class MangaStream {
     }
     async convertSlugToPostId(slug, path) {
         // Credit to the MadaraDex team :-D
-        const url = await this.getBaseUrl();
+        const url = await this.getAndSetBaseUrl();
         const headRequest = App.createRequest({
             url: `${url}/${path}/${slug}/`,
             method: 'HEAD'
@@ -4114,7 +4128,7 @@ class MangaStream {
         return this.cheerio.load(response.data);
     }
     async getCloudflareBypassRequestAsync() {
-        const url = await this.getBaseUrl();
+        const url = await this.getAndSetBaseUrl();
         return App.createRequest({
             url: `${this.bypassPage || url}/`,
             method: 'GET',
@@ -4141,7 +4155,7 @@ exports.MangaStream = MangaStream;
 },{"./MangaStreamHelper":92,"./MangaStreamParser":93,"./UrlBuilder":94,"@paperback/types":61,"simple-url":87}],92:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getFilterTagsBySection = exports.getIncludedTagBySection = exports.createHomeSection = exports.DefaultHomeSectionData = void 0;
+exports.isImgLink = exports.getFilterTagsBySection = exports.getIncludedTagBySection = exports.createHomeSection = exports.DefaultHomeSectionData = void 0;
 const types_1 = require("@paperback/types");
 exports.DefaultHomeSectionData = {
     titleSelectorFunc: ($, element) => $('h2', element).text().trim(),
@@ -4175,6 +4189,10 @@ function getFilterTagsBySection(section, tags, included, supportsExclusion = fal
     });
 }
 exports.getFilterTagsBySection = getFilterTagsBySection;
+function isImgLink(url) {
+    return (url.match(/^http[^\?]*.(jpg|jpeg|gif|png|tiff|bmp)(\?(.*))?$/gmi) != null);
+}
+exports.isImgLink = isImgLink;
 
 },{"@paperback/types":61}],93:[function(require,module,exports){
 "use strict";
