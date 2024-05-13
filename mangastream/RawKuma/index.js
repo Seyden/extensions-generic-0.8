@@ -4008,10 +4008,6 @@ class MangaStream {
             }
         });
         /**
-         * The URL of the website. Eg. https://mangadark.com without a trailing slash
-         */
-        this.finalUrl = '';
-        /**
          * The language code which this source supports.
          */
         this.language = '🇬🇧';
@@ -4144,7 +4140,6 @@ class MangaStream {
                 sortIndex: 60
             }
         };
-        this.getMangaData = async (mangaId) => await this.loadRequestData(this.getMangaShareUrl(mangaId));
         this.configureSections();
     }
     async getSourceMenu() {
@@ -4163,7 +4158,6 @@ class MangaStream {
     }
     async getAndSetBaseUrl() {
         let url = await this.stateManager.retrieve('Domain') ?? this.baseUrl;
-        this.finalUrl = url;
         return url;
     }
     // ----HOMESCREEN SELECTORS----
@@ -4175,13 +4169,14 @@ class MangaStream {
      */
     configureSections() {
     }
-    getMangaShareUrl(mangaId) {
-        return this.usePostIds
-            ? `${this.finalUrl}/${this.sourceTraversalPathName}/?p=${mangaId}/`
-            : `${this.finalUrl}/${this.sourceTraversalPathName}/${mangaId}/`;
+    async getMangaData(mangaId) {
+        let url = await this.getAndSetBaseUrl();
+        url = this.usePostIds
+            ? `${url}/${this.sourceTraversalPathName}/?p=${mangaId}/`
+            : `${url}/${this.sourceTraversalPathName}/${mangaId}/`;
+        return await this.loadRequestData(url);
     }
     async getMangaDetails(mangaId) {
-        await this.getAndSetBaseUrl();
         const $ = await this.getMangaData(mangaId);
         return this.parser.parseMangaDetails($, mangaId, this);
     }
