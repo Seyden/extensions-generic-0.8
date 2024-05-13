@@ -150,14 +150,9 @@ export abstract class MangaStream implements ChapterProviding, HomePageSectionsP
     async interceptRequest(request: Request): Promise<void> {
     }
 
-    /**
-     * The URL of the website. Eg. https://mangadark.com without a trailing slash
-     */
-    finalUrl: string = ''
     abstract baseUrl: string
     async getAndSetBaseUrl(): Promise<string> {
         let url: string = await this.stateManager.retrieve('Domain') ?? this.baseUrl
-        this.finalUrl = url
         return url
     }
 
@@ -317,16 +312,16 @@ export abstract class MangaStream implements ChapterProviding, HomePageSectionsP
         }
     }
 
-    getMangaShareUrl(mangaId: string): string {
-        return this.usePostIds
-               ? `${this.finalUrl}/${this.sourceTraversalPathName}/?p=${mangaId}/`
-               : `${this.finalUrl}/${this.sourceTraversalPathName}/${mangaId}/`
+    async getMangaData(mangaId: string): Promise<CheerioStatic> { 
+        let url: string = await this.getAndSetBaseUrl()
+        url = this.usePostIds
+               ? `${url}/${this.sourceTraversalPathName}/?p=${mangaId}/`
+               : `${url}/${this.sourceTraversalPathName}/${mangaId}/`
+
+        return await this.loadRequestData(url)
     }
 
-    getMangaData = async (mangaId: string): Promise<CheerioStatic> => await this.loadRequestData(this.getMangaShareUrl(mangaId))
-
     async getMangaDetails(mangaId: string): Promise<SourceManga> {
-        await this.getAndSetBaseUrl()
         const $ = await this.getMangaData(mangaId)
         return this.parser.parseMangaDetails($, mangaId, this)
     }
