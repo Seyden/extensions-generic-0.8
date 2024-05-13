@@ -14,7 +14,7 @@ import {
 const LUMINOUSSCANS_DOMAIN = 'https://luminouscomics.org'
 
 export const LuminousScansInfo: SourceInfo = {
-    version: getExportVersion('0.0.1'),
+    version: getExportVersion('0.0.2'),
     name: 'LuminousScans',
     description: 'Extension that pulls manga from LuminousScans',
     author: 'yehru',
