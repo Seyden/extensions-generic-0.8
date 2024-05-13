@@ -3927,7 +3927,7 @@ const types_1 = require("@paperback/types");
 const MangaStream_1 = require("../MangaStream");
 const LUMINOUSSCANS_DOMAIN = 'https://luminouscomics.org';
 exports.LuminousScansInfo = {
-    version: (0, MangaStream_1.getExportVersion)('0.0.1'),
+    version: (0, MangaStream_1.getExportVersion)('0.0.2'),
     name: 'LuminousScans',
     description: 'Extension that pulls manga from LuminousScans',
     author: 'yehru',
