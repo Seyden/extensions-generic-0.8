@@ -3975,7 +3975,7 @@ const UrlBuilder_1 = require("./UrlBuilder");
 const MangaStreamHelper_1 = require("./MangaStreamHelper");
 const simpleUrl = require('simple-url');
 // Set the version for the base, changing this version will change the versions of all sources
-const BASE_VERSION = '3.0.3';
+const BASE_VERSION = '3.0.4';
 const getExportVersion = (EXTENSION_VERSION) => {
     return BASE_VERSION.split('.')
         .map((x, index) => Number(x) + Number(EXTENSION_VERSION.split('.')[index]))
