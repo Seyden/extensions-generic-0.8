@@ -4254,6 +4254,8 @@ class MangaStream {
             result = await this.search(metadata, query);
             metadata = result.metadata;
             manga = result.manga;
+            if (metadata == undefined)
+                break;
         }
         return App.createPagedResults({
             results: manga,
